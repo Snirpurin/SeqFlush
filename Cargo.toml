@@ -1,9 +1,6 @@
-[package]
-name = "SeqFlush"
-version = "0.1.0"
-authors = ["Hanus Krett Hansen <hkh@82.211.205.205>"]
-edition = "2018"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
+members = [
+    "seq_flush",
+    "run_sf"
+]
