@@ -16,7 +16,7 @@ pub mod server{
 
     
     // Splits the file into several file handlers
-    pub fn init_file(path_file:String, num_seq:i32, seq_number:f32)->(Vec<File>,u64,u64){
+    pub fn init_file(path_file:&str, seq_number:f32)->(Vec<File>,u64,u64){
         
         let file = File::open(&path_file).unwrap();
         let metadata = file.metadata().unwrap();
@@ -48,10 +48,10 @@ pub mod server{
         sockets
     }
 
-    pub fn make_address(range:&[u64], addr: &str)->Vec<String>{
+    pub fn make_address(start:u64, end:u64, addr: &str)->Vec<String>{
         let mut address:Vec<String> = Vec::new();
-        for port in range.iter(){
-            address.push(format!("{}{}",addr, port));
+        for port in start..=end{
+            address.push(format!("{}:{}",addr, port));
         }
         address
     }
@@ -63,8 +63,10 @@ pub mod server{
         sockets
     } 
     
-    pub fn sender(files:Vec<File>, sizes:u64, addres:Vec<u32>){
-
+    pub fn sender(mut file:File, size:u64, addres:UdpSocket){
+        let mut buf:Vec<u8> = vec![0;size as usize];
+        file.read_exact(&mut buf); 
+        addres.send(&mut buf);
 
 
 
