@@ -63,9 +63,9 @@ pub mod server{
         sockets
     } 
     
-    pub fn sender(mut file:File, size:u64, addres:UdpSocket){
+    pub fn sender(mut file:&File, size:u64, addres:UdpSocket){
         let mut buf:Vec<u8> = vec![0;size as usize];
-        file.read_exact(&mut buf); 
+        file.read_exact(&mut buf);
         addres.send(&mut buf);
 
 
@@ -84,7 +84,7 @@ pub mod client {
     pub fn init_rec(start:u64, end:u64)->Vec<UdpSocket>{
         let mut address:Vec<UdpSocket> = Vec::new();
         for port in start..=end{
-            address.push(UdpSocket::bind(format!("{}{}","127.0.0.1::", port)).unwrap());
+            address.push(UdpSocket::bind(format!("{}:{}","127.0.0.1", port)).unwrap());
         }
         address
     }
