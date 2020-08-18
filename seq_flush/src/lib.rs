@@ -1,27 +1,84 @@
-use std::net::UdpSocket;
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::fs::File;
 use std::io::SeekFrom;
+use std::net::UdpSocket;
 use std::thread;
 
-pub mod server{
+const FILE_BUF_SIZE: usize = 1000;
+const PACKET_BUF_SIZE: usize = 500;
+
+pub mod server {
     use super::*;
 
-    pub fn init_bind(port:&str)->UdpSocket{
-        
-        let socket = UdpSocket::bind(format!("{}{}","127.0.0.1::", port)).unwrap();
+    pub struct FileSender<F>{
+        file:F,
+        current:u64,
+        start:u64,
+        end:u64,
+        size:u64,
+        index:u64,
+        socket:UdpSocket,
+        buffer:Vec<u8>,
+        packet:Packet,
+    }
+
+    pub struct Packet{
+        data:[u8;PACKET_BUF_SIZE],
+        header_packet_size:u32,
+        header_protocol:u32,
+    }
+
+    impl<F: Read + Seek> FileSender<F>{
+        pub fn new( file:F, start:u64, end:u64, index:u64, socket:UdpSocket)->Self{
+                FileSender{
+                    file,
+                    current:start,
+                    start:start,
+                    end:end,
+                    size:end-start,
+                    index:index,
+                    socket:socket,
+                    //buffer:vec![2u8;FILE_BUF_SIZE],
+                    buffer:Vec::new(),
+                    packet:Packet{data:[0u8;PACKET_BUF_SIZE],
+                        header_packet_size:0,
+                        header_protocol:0},
+                }
+        }
+        pub fn read(&mut self,mut size:u64){
+            if self.current + size > self.end{
+                size = self.end - (size +self.current);
+            }
+            let mut chunk = self.file.by_ref().take(size);
+            let n = chunk.read_to_end(&mut self.buffer).expect("Did not read enough");
+            self.current = self.current + size;
+        }
+        pub fn prep_packet(&mut self){
+            self.packet.data
+        }
+
+        pub fn send(&mut self, size:u64) {
+
+            self.socket.send()
+            
+        }
+
+
+    }
+
+
+
+    pub fn init_bind(port: &str) -> UdpSocket {
+        let socket = UdpSocket::bind(format!("{}{}", "127.0.0.1::", port)).unwrap();
         return socket;
     }
 
-    
     // Splits the file into several file handlers
-    pub fn init_file(path_file:&str, seq_number:f32)->(Vec<File>,u64,u64){
-        
+    pub fn init_file(path_file: &str, seq_number: f32) -> (Vec<File>, u64, u64) {
         let file = File::open(&path_file).unwrap();
         let metadata = file.metadata().unwrap();
-        let mut filehandles:Vec<File> = Vec::new();
-        
+        let mut filehandles: Vec<File> = Vec::new();
         let size = metadata.len();
         let seq = (size as f32) / seq_number;
         let temp = seq % 1 as f32;
@@ -31,49 +88,46 @@ pub mod server{
 
         for n in 0..=seq_number as u64 {
             let mut file = File::open(&path_file).unwrap();
-            file.seek(SeekFrom::Start(n*seq)).unwrap();
+            file.seek(SeekFrom::Start(n * seq)).unwrap();
             filehandles.push(file)
         }
         //returns the file handlers and the size of each seq and of the last one
-        (filehandles,seq,seq_last)
-        
+        (filehandles, seq, seq_last)
     }
 
-    pub fn init_file_to_socket(files: &Vec<File>) -> Vec<UdpSocket>{
+    pub fn init_full(path: &str, n_seq: u64, addres: &str, port_st: u64, port_end: u64) -> Vec<UdpSocket> {
+        let addresses = make_address(port_st, port_end, addres);
+        let (mut files, size, size_last) = init_file(path, 10.0);
+        let socket_server = init_socket(&files);
+        connect(addresses, socket_server)
+    }
+
+    pub fn init_socket(files: &Vec<File>) -> Vec<UdpSocket> {
         //
         let mut sockets: Vec<UdpSocket> = Vec::new();
-        for file in files{
+        for file in files {
             sockets.push(UdpSocket::bind("0.0.0.0:0").unwrap());
         }
         sockets
     }
 
-    pub fn make_address(start:u64, end:u64, addr: &str)->Vec<String>{
-        let mut address:Vec<String> = Vec::new();
-        for port in start..=end{
-            address.push(format!("{}:{}",addr, port));
+    pub fn make_address(start: u64, end: u64, addr: &str) -> Vec<String> {
+        let mut address: Vec<String> = Vec::new();
+        for port in start..=end {
+            address.push(format!("{}:{}", addr, port));
         }
         address
     }
 
-    pub fn connect(addres:Vec<String>, mut sockets:Vec<UdpSocket>)->Vec<UdpSocket>{
-        for (socket,addr) in sockets.iter().zip(addres){
+    pub fn connect(addres: Vec<String>, mut sockets: Vec<UdpSocket>) -> Vec<UdpSocket> {
+        for (socket, addr) in sockets.iter().zip(addres) {
             socket.connect(addr);
         }
         sockets
-    } 
-    
-    pub fn sender(mut file:&File, size:u64, addres:UdpSocket){
-        let mut buf:Vec<u8> = vec![0;size as usize];
-        file.read_exact(&mut buf);
-        addres.send(&mut buf);
-
-
-
     }
 
-    pub fn thread_send(file:File, adddr:String)->Result<(),()>{
-        
+
+    pub fn thread_send(file: File, adddr: String) -> Result<(), ()> {
         return Ok(());
     }
 }
@@ -81,19 +135,38 @@ pub mod server{
 pub mod client {
     use super::*;
 
-    pub fn init_rec(start:u64, end:u64)->Vec<UdpSocket>{
-        let mut address:Vec<UdpSocket> = Vec::new();
-        for port in start..=end{
-            address.push(UdpSocket::bind(format!("{}:{}","127.0.0.1", port)).unwrap());
+    pub fn init_rec(start: u64, end: u64) -> Vec<UdpSocket> {
+        let mut address: Vec<UdpSocket> = Vec::new();
+        for port in start..=end {
+            address.push(UdpSocket::bind(format!("{}:{}", "127.0.0.1", port)).unwrap());
         }
         address
+    }
+
+    pub fn init_file(path_file: &str, seq_number: f32, size:u64) -> (Vec<File>, u64, u64) {
+        let file = File::create(&path_file).unwrap();
+        
+        let mut filehandles: Vec<File> = Vec::new();
+        let size = metadata.len();
+        let seq = (size as f32) / seq_number;
+        let temp = seq % 1 as f32;
+        let seq = ((1 as f32 - temp) + seq) as u64;
+        let delta = (seq_number as u64 * seq) - size;
+        let seq_last = seq - delta;
+
+        for n in 0..=seq_number as u64 {
+            let mut file = File::open(&path_file).unwrap();
+            file.seek(SeekFrom::Start(n * seq)).unwrap();
+            filehandles.push(file)
+        }
+        //returns the file handlers and the size of each seq and of the last one
+        (filehandles, seq, seq_last)
     }
 
 
 
 
 }
-
 
 #[cfg(test)]
 mod tests {

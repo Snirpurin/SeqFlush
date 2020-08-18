@@ -17,7 +17,7 @@ fn main() {
     let addresses = seq_flush::server::make_address(8000, 8009, "127.0.0.1");
 
     let (mut files,size,size_last) = seq_flush::server::init_file("test.txt", 10.0);
-    let socket_server = seq_flush::server::init_file_to_socket(&files);
+    let socket_server = seq_flush::server::init_socket(&files);
     let socket_server = seq_flush::server::connect(addresses, socket_server);
     println!("size is : {}, end size is : {}", size,size_last);
 
@@ -30,10 +30,7 @@ fn main() {
     let mut test_rec = File::create("test_rec.txt").unwrap();
     let mut rec_buf:Vec<u8> =vec![0;112];
     for socket in socket_client{
-        //println!("helloe");
         socket.recv_from(&mut rec_buf).expect("failed1");
-        //let te = String::from_utf8(rec_buf.clone()).unwrap();
-        //println!("{}",te);
         test_rec.write_all(&rec_buf).expect("failed2");
     }
     let meta =test_rec.metadata().unwrap();
