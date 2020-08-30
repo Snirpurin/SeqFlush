@@ -16,29 +16,48 @@ fn main() {
 
 
 
-    let mut filesenders = seq_flush::server::init_full("test.txt", 10, "127.0.0.1", 8000, 8009);
+    let mut filesenders = seq_flush::server::init_full("test_1gb", 10, "127.0.0.1", 8000, 8009);
+    let handle1=  thread::spawn(move || {
+        let mut holder = filesenders;
+        loop {
+            for mut fs in &mut holder{
+                fs.read_into_mem();
+                fs.prep_packet();
+                fs.send(54);
+                fs.prep_packet();
+                fs.send(54);
+                if fs.get_current() > fs.get_end() - 501{
+                    break;
+                }
+            }
+        }
 
-    for mut fs in filesenders{
-        fs.read_into_mem();
-        fs.prep_packet();
-        fs.send(54);
-    }
+    }); 
 
 
    let handle = thread::spawn(move || {
-        let mut test_rec = File::create("test_rec.txt").unwrap();
-        let mut rec_buf:Vec<u8> =vec![0;10];
-        for socket in socket_client{
-            socket.recv_from(&mut rec_buf).expect("failed1");
-            test_rec.write_all(&rec_buf).expect("failed2");
-        }
+        let mut test_rec = File::create("test_rec_1gb.").unwrap();
+        let mut rec_buf =[0;508];
+        let mut socket_client = socket_client;
         let meta =test_rec.metadata().unwrap();
+        loop{
+            for socket in &mut socket_client{
+                socket.recv_from(&mut rec_buf).expect("failed1");
+                test_rec.write_all(&rec_buf).expect("failed2");
+            }
+            if meta.len()> 900000{
+                break;
+            }
+        }
+
+        
         println!("{}",meta.len());
     
         println!("finished");
 
     });
     handle.join().unwrap();
+    handle1.join().unwrap();
 
 
 
