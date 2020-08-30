@@ -27,7 +27,7 @@ fn main() {
 
    let handle = thread::spawn(move || {
         let mut test_rec = File::create("test_rec.txt").unwrap();
-        let mut rec_buf:Vec<u8> =vec![0;112];
+        let mut rec_buf:Vec<u8> =vec![0;10];
         for socket in socket_client{
             socket.recv_from(&mut rec_buf).expect("failed1");
             test_rec.write_all(&rec_buf).expect("failed2");

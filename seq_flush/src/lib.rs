@@ -5,8 +5,9 @@ use std::io::SeekFrom;
 use std::net::UdpSocket;
 use std::thread;
 
-const FILE_BUF_SIZE: usize = 1000;
-const PACKET_BUF_SIZE: usize = 500;
+const FILE_BUF_SIZE: usize = 20;
+const PACKET_BUF_SIZE: usize = 18;
+const HEADER_PROTOCOL_SIZE: usize = 8;
 
 pub mod server {
     use super::*;
@@ -50,14 +51,7 @@ pub mod server {
                         header_protocol:0},
                 }
         }
-        pub fn read(&mut self,mut size:u64){
-            if self.current + size > self.end{
-                size = self.end - (size +self.current);
-            }
-            let mut chunk = self.file.by_ref().take(size);
-            let n = chunk.read_to_end(&mut self.buffer).expect("Did not read enough");
-            self.current = self.current + size;
-        }
+
 
         pub fn read_into_mem(&mut self){
             let mut size = FILE_BUF_SIZE as u64;
@@ -70,8 +64,17 @@ pub mod server {
         }
 
         pub fn prep_packet(&mut self){
-
-            self.packet.data.copy_from_slice(&mut self.buffer[self.buf_index as usize..(self.buf_index + PACKET_BUF_SIZE as u64) as usize]);
+            let packetsize = self.packet.header_packet_size;
+            let protocol = self.packet.header_protocol;
+            let size = unsafe {
+                std::mem::transmute::<u32,[u8; 4]>(packetsize);
+            };
+            let protocol = unsafe {
+                std::mem::transmute::<u32,[u8; 4]>(protocol);
+            };
+            self.packet.data[HEADER_PROTOCOL_SIZE..].copy_from_slice(&mut self.buffer[(self.buf_index as usize + HEADER_PROTOCOL_SIZE)..(self.buf_index + PACKET_BUF_SIZE as u64) as usize]);
+            let buf = [self.packet.header_protocol,self.packet.header_packet_size];
+            self.packet.data[..HEADER_PROTOCOL_SIZE].copy_from_slice(size)
         }
 
         pub fn send(&mut self, size:u64) {
@@ -97,6 +100,7 @@ pub mod server {
         let file = File::open(&path_file).unwrap();
         let metadata = file.metadata().unwrap();
         let mut filehandles: Vec<File> = Vec::new();
+        
         let size = metadata.len();
         let seq = (size as f32) / seq_number as f32;
         let temp = seq % 1 as f32;
