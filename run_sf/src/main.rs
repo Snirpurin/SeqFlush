@@ -36,16 +36,18 @@ fn main() {
 
 
    let handle = thread::spawn(move || {
-        let mut test_rec = File::create("test_rec_1gb.").unwrap();
+        let mut test_rec = File::create("test_rec_1gb").unwrap();
         let mut rec_buf =[0;508];
         let mut socket_client = socket_client;
         let meta =test_rec.metadata().unwrap();
+        let mut bytes: u64 = 0;
         loop{
             for socket in &mut socket_client{
-                socket.recv_from(&mut rec_buf).expect("failed1");
+                let (data,s) = socket.recv_from(&mut rec_buf).expect("failed1");
+                bytes = bytes + data as u64;
                 test_rec.write_all(&rec_buf).expect("failed2");
             }
-            if meta.len()> 900000{
+            if bytes> 800000000{
                 break;
             }
         }

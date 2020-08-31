@@ -11,7 +11,8 @@ const FILE_BUF_SIZE: usize = 1000;
 const HEADER_PROTOCOL_SIZE: usize = 4;
 const HEADER_PACKET_SIZE: usize = 4;
 const HEADER_SIZE: usize = HEADER_PACKET_SIZE + HEADER_PROTOCOL_SIZE;
-const PACKET_BUF_SIZE: usize = 500 + HEADER_SIZE;
+const DATA_SIZE: usize = 500;
+const PACKET_BUF_SIZE: usize = DATA_SIZE + HEADER_SIZE;
 
 pub mod server {
     use super::*;
@@ -88,7 +89,7 @@ pub mod server {
                 std::mem::transmute::<u32,[u8; 4]>(protocol)
             };
 
-            self.packet.data[HEADER_SIZE..].copy_from_slice(&mut self.buffer[(self.buf_index as usize)..(self.buf_index + (PACKET_BUF_SIZE - HEADER_SIZE) as u64) as usize]);
+            self.packet.data[HEADER_SIZE..].copy_from_slice(&mut self.buffer[(self.buf_index as usize)..(self.buf_index + (DATA_SIZE) as u64) as usize]);
             self.packet.data[..HEADER_PACKET_SIZE].copy_from_slice(&size);
             self.packet.data[HEADER_PACKET_SIZE..(HEADER_PACKET_SIZE+HEADER_PROTOCOL_SIZE)].copy_from_slice(&protocol);
             //println!("{:?}",self.packet.data);
