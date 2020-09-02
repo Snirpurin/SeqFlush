@@ -14,52 +14,62 @@ fn main() {
     //test_file.write_all(&mut data).unwrap();
     let socket_client = seq_flush::client::init_rec(8000, 8009);
 
-
+    
 
     let mut filesenders = seq_flush::server::init_full("test_1gb", 10, "127.0.0.1", 8000, 8009);
-    let handle1=  thread::spawn(move || {
-        let mut holder = filesenders;
-        loop {
-            for mut fs in &mut holder{
-                fs.read_into_mem();
-                fs.prep_packet();
-                fs.send(54);
-                fs.prep_packet();
-                fs.send(54);
-                if fs.get_current() > fs.get_end() - 501{
+ 
+    let mut handle_sender = vec![];
+    for mut fs in filesenders{
+        handle_sender.push(thread::spawn(move || {
+            let mut file = fs;
+            loop{
+                if file.test(){
+                    file.read_into_mem();
+                }
+                file.prep_packet();
+                file.send(54);
+                if file.done(){
+                    println!("current is {} end is {}", file.get_current(),file.get_end());
+                    println!("done");
                     break;
                 }
+
             }
-        }
+        }));
+    } 
+/*
+    let mut handle_rec = vec![];
 
-    }); 
-
-
-   let handle = thread::spawn(move || {
-        let mut test_rec = File::create("test_rec_1gb").unwrap();
-        let mut rec_buf =[0;508];
-        let mut socket_client = socket_client;
-        let meta =test_rec.metadata().unwrap();
-        let mut bytes: u64 = 0;
-        loop{
-            for socket in &mut socket_client{
-                let (data,s) = socket.recv_from(&mut rec_buf).expect("failed1");
-                bytes = bytes + data as u64;
-                test_rec.write_all(&rec_buf).expect("failed2");
-            }
-            if bytes> 800000000{
-                break;
-            }
-        }
-
-        
-        println!("{}",meta.len());
+    let mut test_rec = File::create("test_rec_1gb").expect("cant create rec file");
+   
     
-        println!("finished");
+    for socket in socket_client{
+        let file = File::open("test_rec_1gb").expect("cant open file");
+        handle_rec.push(thread::spawn(move || {
+            let mut file = file;
+            let mut rec_buf =[0;508];
+            let mut bytes: u64 = 0;
+            loop{
+                let (data,s) = socket.recv_from(&mut rec_buf).expect("failed1");               
+                file.write_all(&rec_buf).expect("failed2");
+            }
+        }));
 
-    });
-    handle.join().unwrap();
-    handle1.join().unwrap();
+    }
+    for handle in handle_rec{
+        handle.join();
+    }
+    */
+    for handle in handle_sender{
+        handle.join();
+    }
+
+
+
+
+    
+
+
 
 
 

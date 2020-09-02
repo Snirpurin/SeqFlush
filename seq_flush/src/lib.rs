@@ -5,7 +5,7 @@ use std::io::SeekFrom;
 use std::net::UdpSocket;
 use std::thread;
 
-const FILE_BUF_SIZE: usize = 1000;
+const FILE_BUF_SIZE: usize = 10000;
 
 
 const HEADER_PROTOCOL_SIZE: usize = 4;
@@ -19,15 +19,15 @@ pub mod server {
 
     pub struct FileSender<F>{
         file:F,
-        current:u64,
-        start:u64,
-        end:u64,
-        size:u64,
-        index:u64,
+        current:usize,
+        start:usize,
+        end:usize,
+        size:usize,
+        index:usize,
         socket:UdpSocket,
         buffer:Vec<u8>,
-        buf_index:u64,
-        buf_index_end:u64,
+        buf_index:usize,
+        buf_chunks:usize,
         packet:Packet,
     }
 
@@ -39,7 +39,7 @@ pub mod server {
     }
 
     impl<F: Read + Seek> FileSender<F>{
-        pub fn new( file:F, start:u64, end:u64, index:u64, socket:UdpSocket)->Self{
+        pub fn new( file:F, start:usize, end:usize, index:usize, socket:UdpSocket)->Self{
                 FileSender{
                     file,
                     current:start,
@@ -48,10 +48,11 @@ pub mod server {
                     size:end-start,
                     index:index,
                     socket:socket,
-                    //buffer:vec![2u8;FILE_BUF_SIZE],
+
                     buffer:Vec::with_capacity(FILE_BUF_SIZE),
                     buf_index:0,
-                    buf_index_end:FILE_BUF_SIZE as u64,
+                    buf_chunks: 0,
+
                     packet:Packet{data:[0u8;PACKET_BUF_SIZE],
                         current_size:0,
                         header_packet_size:0,
@@ -59,37 +60,54 @@ pub mod server {
                 }
         }
         
-        pub fn get_current(&mut self)->u64{
+        pub fn get_current(&mut self)->usize{
             self.current
         }
 
-        pub fn get_end(&mut self)->u64{
+        pub fn get_end(&mut self)->usize{
             self.end
         }
 
+        pub fn test(&mut self)-> bool{
+            return self.buf_index >= self.buffer.len()
+        }
+        pub fn done(&mut self)->bool{
+            self.current == self.end && self.buf_index >= self.buffer.len()
+        }
 
         pub fn read_into_mem(&mut self) ->Result<(),io::ErrorKind>{
-            let mut size = FILE_BUF_SIZE as u64;
-            if self.current + FILE_BUF_SIZE as u64 > self.end{
-                size = self.end - (FILE_BUF_SIZE as u64 +self.current);
+            self.buf_index = 0;
+            self.buffer.clear();
+            let mut size = FILE_BUF_SIZE;
+            if self.current + FILE_BUF_SIZE > self.end{
+                size = self.end - (FILE_BUF_SIZE + self.current);
             }
-            let mut chunk = self.file.by_ref().take(size);
+            let mut chunk = self.file.by_ref().take(size as u64);
             let n = chunk.read_to_end(&mut self.buffer).expect("Did not read enough");
+            //println!("{}",n);
             self.current = self.current + size;
+            self.buf_chunks = size / DATA_SIZE;
             Ok(())
         }
 
         pub fn prep_packet(&mut self){
-            let packetsize = self.packet.header_packet_size;
+            let mut packetsize = DATA_SIZE;
             let protocol = self.packet.header_protocol;
+            if (self.buf_index + DATA_SIZE) > self.buffer.len() && self.buf_index !=self.buffer.len(){
+                packetsize = self.buffer.len() - self.buf_index;
+                
+            }
+            //println!("{}",packetsize);
             let size = unsafe {
-                std::mem::transmute::<u32,[u8; 4]>(packetsize)
+                std::mem::transmute::<u32,[u8; 4]>(packetsize as u32)
             };
             let protocol = unsafe {
                 std::mem::transmute::<u32,[u8; 4]>(protocol)
             };
 
-            self.packet.data[HEADER_SIZE..].copy_from_slice(&mut self.buffer[(self.buf_index as usize)..(self.buf_index + (DATA_SIZE) as u64) as usize]);
+
+            self.packet.data[HEADER_SIZE..].copy_from_slice(&mut self.buffer[(self.buf_index)..(self.buf_index + packetsize)]);
+            self.buf_index = self.buf_index + packetsize;
             self.packet.data[..HEADER_PACKET_SIZE].copy_from_slice(&size);
             self.packet.data[HEADER_PACKET_SIZE..(HEADER_PACKET_SIZE+HEADER_PROTOCOL_SIZE)].copy_from_slice(&protocol);
             //println!("{:?}",self.packet.data);
@@ -109,28 +127,31 @@ pub mod server {
 
 
     pub fn init_bind(port: &str) -> UdpSocket {
-        let socket = UdpSocket::bind(format!("{}{}", "127.0.0.1::", port)).unwrap();
-        return socket;
+        let sock = UdpSocket::bind("0.0.0.0:8888").expect("Failed to bind socket");
+        sock.set_nonblocking(true)
+            .expect("Failed to enter non-blocking mode");
+
+        return sock;
     }
 
     // Splits the file into several file handlers
-    pub fn init_filesender(path_file: &str, seq_number: u64, sockets:Vec<UdpSocket>) -> Vec<FileSender<File>> {
+    pub fn init_filesender(path_file: &str, seq_number: usize, sockets:Vec<UdpSocket>) -> Vec<FileSender<File>> {
         let mut filesender:Vec<FileSender<File>> = Vec::new();
         let file = File::open(&path_file).unwrap();
         let metadata = file.metadata().unwrap();
         let mut filehandles: Vec<File> = Vec::new();
         
-        let size = metadata.len();
+        let size = metadata.len() as usize;
         let seq = (size as f32) / seq_number as f32;
         let temp = seq % 1 as f32;
-        let seq = ((1 as f32 - temp) + seq) as u64;
-        let delta = (seq_number as u64 * seq) - size;
+        let seq = ((1 as f32 - temp) + seq) as usize;
+        let delta = (seq_number as usize * seq) - size;
         let seq_last = seq - delta;
 
         for (n,socket) in (0..seq_number).zip(sockets) {
             let mut file = File::open(&path_file).unwrap();
-            file.seek(SeekFrom::Start(n * seq)).unwrap();
-            if n == seq_number as u64{
+            file.seek(SeekFrom::Start((n * seq) as u64)).unwrap();
+            if n == seq_number{
                 filesender.push(FileSender::new(file, n * seq, n * seq + seq_last, n, socket));
             }
             else{

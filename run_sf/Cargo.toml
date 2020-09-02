@@ -8,3 +8,16 @@ edition = "2018"
 
 [dependencies]
 seq_flush = {path = "../seq_flush"}
+
+
+[[bin]]
+name ="server"
+path = "src/bin/server.rs"
+
+[[bin]]
+name ="client"
+path = "src/bin/client.rs"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
