@@ -5,6 +5,8 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::io::SeekFrom;
 use std::thread;
+use std::sync::{Arc, Mutex};
+use std::fs::OpenOptions;
 
 fn main() {
     println!("Hello, world!");
@@ -37,16 +39,17 @@ fn main() {
             }
         }));
     } 
-/*
+
     let mut handle_rec = vec![];
 
     let mut test_rec = File::create("test_rec_1gb").expect("cant create rec file");
    
-    
+    let mut progress = Arc::new(Mutex::new(0));
     for socket in socket_client{
-        let file = File::open("test_rec_1gb").expect("cant open file");
+        let thread_progress = progress.clone();
         handle_rec.push(thread::spawn(move || {
-            let mut file = file;
+            let mut thread_progress = thread_progress;
+            let mut file = OpenOptions::new().write(true).open("test_rec_1gb").expect("cant open file");
             let mut rec_buf =[0;508];
             let mut bytes: u64 = 0;
             loop{
@@ -59,7 +62,7 @@ fn main() {
     for handle in handle_rec{
         handle.join();
     }
-    */
+    
     for handle in handle_sender{
         handle.join();
     }

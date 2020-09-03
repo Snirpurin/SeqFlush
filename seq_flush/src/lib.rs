@@ -90,7 +90,10 @@ pub mod server {
             Ok(())
         }
 
+        //possible protocol her as input
         pub fn prep_packet(&mut self){
+
+
             let mut packetsize = DATA_SIZE;
             let protocol = self.packet.header_protocol;
             if (self.buf_index + DATA_SIZE) > self.buffer.len() && self.buf_index !=self.buffer.len(){
