@@ -7,6 +7,7 @@ use std::io::SeekFrom;
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::fs::OpenOptions;
+//use std::io::{self, BufReader};
 
 fn main() {
     println!("Hello, world!");
@@ -52,6 +53,8 @@ fn main() {
             let mut file = OpenOptions::new().write(true).open("test_rec_1gb").expect("cant open file");
             let mut rec_buf =[0;508];
             let mut bytes: u64 = 0;
+            //BufReader::new()
+
             loop{
                 let (data,s) = socket.recv_from(&mut rec_buf).expect("failed1");               
                 file.write_all(&rec_buf).expect("failed2");
